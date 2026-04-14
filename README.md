@@ -2,6 +2,10 @@
 
 > Stop paying for a sports car when you need a bicycle. RouteIQ automatically routes each AI request to the cheapest model that can handle it — saving 50–90% on LLM costs with zero code changes.
 
+## Demo
+
+[![Watch the demo](https://github.com/STV1222/RouteIQ/releases/download/v1.0.0/RouteIQ_demo.mov)](https://github.com/STV1222/RouteIQ/releases/download/v1.0.0/RouteIQ_demo.mov)
+
 ---
 
 ## The Problem
@@ -324,32 +328,11 @@ for chunk in stream:
 
 ## Architecture
 
-```
-Client
-  │
-  ▼
-FastAPI (Lambda via Mangum)
-  │
-  ├── Auth — DynamoDB API key lookup + budget check
-  ├── Cache — Redis SHA-256 prompt hash (5 min TTL)
-  │
-  ▼
-Classifier — keyword regex, <5ms, no LLM call
-  │
-  ▼
-Scorer — cheapest model where max_complexity >= score
-  │
-  ▼
-Forwarder — OpenRouter (single key, all providers)
-              auto-fallback to next model on failure
-  │
-  ├── Cache write
-  ├── DynamoDB usage log
-  └── DynamoDB spend update
-  │
-  ▼
-OpenAI-compatible response + RouteIQ metadata
-```
+![System Architecture](assets/routeiq_system_architecture.svg)
+
+## Request Lifecycle
+
+![Request Lifecycle](assets/routeiq_request_lifecycle.svg)
 
 ---
 
