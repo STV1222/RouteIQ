@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  # ----------------------------------------------------------------
+  # Redis — prompt cache
+  # ----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: routeiq-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------
+  # DynamoDB Local — usage logs + API key store
+  # ----------------------------------------------------------------
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: routeiq-dynamodb
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8000 > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------
+  # RouteIQ application
+  # ----------------------------------------------------------------
+  routeiq:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routeiq-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      ROUTEIQ_ENV: development
+    volumes:
+      - ./src:/app/src         # hot reload — mount source
+      - ./tests:/app/tests     # mount tests for pytest
+    depends_on:
+      redis:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_healthy
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
+
+volumes:
+  redis_data:

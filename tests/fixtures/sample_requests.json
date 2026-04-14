@@ -1,0 +1,41 @@
+{
+  "simple_greeting": {
+    "messages": [{"role": "user", "content": "Hello, how are you?"}],
+    "expected_category": "general",
+    "expected_score_max": 50
+  },
+  "summarization": {
+    "messages": [{"role": "user", "content": "Please summarize the following article in 3 bullet points: ..."}],
+    "expected_category": "summarization",
+    "expected_score_max": 35
+  },
+  "translation": {
+    "messages": [{"role": "user", "content": "Translate this paragraph to French: The quick brown fox."}],
+    "expected_category": "translation",
+    "expected_score_max": 30
+  },
+  "classification": {
+    "messages": [{"role": "user", "content": "Classify the sentiment of this review as positive or negative."}],
+    "expected_category": "classification",
+    "expected_score_max": 40
+  },
+  "coding": {
+    "messages": [{"role": "user", "content": "Write a function in Python that implements binary search on a sorted list."}],
+    "expected_category": "coding",
+    "expected_score_min": 60
+  },
+  "reasoning": {
+    "messages": [{"role": "user", "content": "Analyze the trade-offs between microservices and monolithic architectures. Think step by step."}],
+    "expected_category": "reasoning",
+    "expected_score_min": 70
+  },
+  "agentic": {
+    "messages": [{"role": "user", "content": "You are an autonomous agent. Plan and execute a strategy to research competitors and compile a report using the available tools."}],
+    "expected_category": "agentic",
+    "expected_score_min": 80
+  },
+  "long_input": {
+    "messages": [{"role": "user", "content": "LONG_PLACEHOLDER"}],
+    "note": "Replace LONG_PLACEHOLDER with 8000+ char content to test token boost"
+  }
+}

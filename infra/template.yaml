@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: RouteIQ — Multi-Agent LLM Cost Optimizer
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 512
+    Runtime: python3.12
+    Environment:
+      Variables:
+        ROUTEIQ_ENV: production
+        DEFAULT_MODEL: gpt-5.4
+        USE_OPENROUTER: "true"
+        SKIP_CACHE: "true"
+        DYNAMODB_TABLE_USAGE: !Ref UsageTable
+        DYNAMODB_TABLE_KEYS: !Ref ApiKeysTable
+
+Parameters:
+  OpenRouterApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenRouter API key (sk-or-v1-...)
+
+  SkipAuth:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Set to true to disable API key auth (dev only)
+
+Resources:
+  # ----------------------------------------------------------------
+  # Lambda Function
+  # ----------------------------------------------------------------
+  RouteIQFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../
+      Handler: infra/lambda_handler.handler
+      Description: RouteIQ LLM routing proxy
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsageTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiKeysTable
+      Environment:
+        Variables:
+          OPENROUTER_API_KEY: !Ref OpenRouterApiKey
+          SKIP_AUTH: !Ref SkipAuth
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RouteIQApi
+
+  # ----------------------------------------------------------------
+  # API Gateway (HTTP API — cheaper + faster than REST API)
+  # ----------------------------------------------------------------
+  RouteIQApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: "$default"
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+
+  # ----------------------------------------------------------------
+  # DynamoDB Tables
+  # ----------------------------------------------------------------
+  UsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: routeiq_usage
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  ApiKeysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: routeiq_api_keys
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+Outputs:
+  RouteIQApiUrl:
+    Description: RouteIQ API endpoint URL
+    Value: !Sub "https://${RouteIQApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  RouteIQFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt RouteIQFunction.Arn

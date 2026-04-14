@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RouteIQ — Savings Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f1117; }
+    .card { background: #1a1d27; border: 1px solid #2a2d3a; }
+    .stat-value { font-variant-numeric: tabular-nums; }
+    @keyframes pulse-green { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .live-dot { animation: pulse-green 2s infinite; }
+  </style>
+</head>
+<body class="min-h-screen text-gray-100 font-mono">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">R</div>
+      <span class="text-lg font-semibold text-white">RouteIQ</span>
+      <span class="text-gray-500 text-sm">/ Savings Dashboard</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 text-xs text-gray-400">
+        <span class="live-dot w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+        <span id="last-updated">Connecting...</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="api-key-input" type="password" placeholder="API Key (riq-...)"
+          class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 w-48 focus:outline-none focus:border-violet-500"
+        />
+        <button onclick="saveKeyAndRefresh()"
+          class="bg-violet-600 hover:bg-violet-500 text-white text-xs px-3 py-1.5 rounded transition">
+          Connect
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Error banner -->
+    <div id="error-banner" class="hidden bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 text-sm"></div>
+
+    <!-- KPI row -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="card rounded-xl p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Saved</p>
+        <p class="stat-value text-3xl font-bold text-green-400" id="kpi-savings">—</p>
+        <p class="text-xs text-gray-600 mt-1">vs. default model</p>
+      </div>
+      <div class="card rounded-xl p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Actual Cost</p>
+        <p class="stat-value text-3xl font-bold text-white" id="kpi-cost">—</p>
+        <p class="text-xs text-gray-600 mt-1">what you paid</p>
+      </div>
+      <div class="card rounded-xl p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Requests</p>
+        <p class="stat-value text-3xl font-bold text-white" id="kpi-requests">—</p>
+        <p class="text-xs text-gray-600 mt-1">total processed</p>
+      </div>
+      <div class="card rounded-xl p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Cache Hits</p>
+        <p class="stat-value text-3xl font-bold text-indigo-400" id="kpi-cache">—</p>
+        <p class="text-xs text-gray-600 mt-1">free responses</p>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+      <!-- Model distribution -->
+      <div class="card rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4">Model Distribution</h2>
+        <div class="relative h-56">
+          <canvas id="model-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Savings by model -->
+      <div class="card rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4">Savings by Model</h2>
+        <div id="model-table" class="space-y-2 text-xs overflow-y-auto max-h-56">
+          <p class="text-gray-500">No data yet</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent requests -->
+    <div class="card rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-300">Recent Requests</h2>
+        <span class="text-xs text-gray-600">last 50</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left text-gray-500 border-b border-gray-800">
+              <th class="pb-2 pr-4">Time</th>
+              <th class="pb-2 pr-4">Model Used</th>
+              <th class="pb-2 pr-4">Category</th>
+              <th class="pb-2 pr-4">Score</th>
+              <th class="pb-2 pr-4">Tokens</th>
+              <th class="pb-2 pr-4">Cost</th>
+              <th class="pb-2 pr-4">Saved</th>
+              <th class="pb-2">Cache</th>
+            </tr>
+          </thead>
+          <tbody id="requests-table" class="divide-y divide-gray-800/50">
+            <tr><td colspan="8" class="py-4 text-gray-600 text-center">No data yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;
+let API_KEY = localStorage.getItem('routeiq_key') || '';
+let modelChart = null;
+const REFRESH_MS = 15000;
+
+const MODEL_COLORS = {
+  'gpt-5-nano':            '#818cf8',
+  'gemini-2.5-flash-lite': '#34d399',
+  'claude-haiku-4-5':      '#fb923c',
+  'deepseek-v3':           '#60a5fa',
+  'gpt-5.4':               '#a78bfa',
+  'claude-sonnet-4-6':     '#f472b6',
+  'claude-opus-4-6':       '#facc15',
+};
+
+// Pre-fill key from localStorage
+document.getElementById('api-key-input').value = API_KEY;
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${API_KEY}` }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── Save key ─────────────────────────────────────────────────────────────────
+function saveKeyAndRefresh() {
+  API_KEY = document.getElementById('api-key-input').value.trim();
+  localStorage.setItem('routeiq_key', API_KEY);
+  refresh();
+}
+
+// ── Format helpers ───────────────────────────────────────────────────────────
+const usd = n => n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(4)}`;
+const pct = (a, b) => b ? `${((a/b)*100).toFixed(1)}%` : '0%';
+function timeAgo(sk) {
+  const ts = sk?.split('#')[0];
+  if (!ts) return '—';
+  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return `${Math.floor(diff/3600)}h ago`;
+}
+
+// ── Render savings table ─────────────────────────────────────────────────────
+function renderModelTable(byModel) {
+  const el = document.getElementById('model-table');
+  const entries = Object.entries(byModel).sort((a,b) => b[1].savings_usd - a[1].savings_usd);
+  if (!entries.length) { el.innerHTML = '<p class="text-gray-500">No data yet</p>'; return; }
+
+  el.innerHTML = entries.map(([model, data]) => {
+    const color = MODEL_COLORS[model] || '#94a3b8';
+    const savingsPct = data.cost_usd + data.savings_usd > 0
+      ? ((data.savings_usd / (data.cost_usd + data.savings_usd)) * 100).toFixed(0)
+      : 0;
+    return `
+      <div class="flex items-center gap-3">
+        <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
+        <span class="text-gray-300 w-44 truncate">${model}</span>
+        <div class="flex-1 bg-gray-800 rounded-full h-1.5">
+          <div class="h-1.5 rounded-full" style="width:${Math.min(savingsPct,100)}%;background:${color}"></div>
+        </div>
+        <span class="text-gray-400 w-8 text-right">${data.requests}</span>
+        <span class="text-green-400 w-20 text-right">${usd(data.savings_usd)} saved</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Render pie chart ─────────────────────────────────────────────────────────
+function renderChart(byModel) {
+  const labels = Object.keys(byModel);
+  const data   = labels.map(m => byModel[m].requests);
+  const colors = labels.map(m => MODEL_COLORS[m] || '#94a3b8');
+
+  if (modelChart) {
+    modelChart.data.labels = labels;
+    modelChart.data.datasets[0].data = data;
+    modelChart.data.datasets[0].backgroundColor = colors;
+    modelChart.update();
+    return;
+  }
+
+  const ctx = document.getElementById('model-chart').getContext('2d');
+  modelChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#9ca3af', font: { size: 11, family: 'monospace' }, padding: 12, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} requests` } }
+      },
+      cutout: '65%',
+    }
+  });
+}
+
+// ── Render recent requests ───────────────────────────────────────────────────
+function renderRequests(records) {
+  const tbody = document.getElementById('requests-table');
+  if (!records.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="py-4 text-gray-600 text-center">No requests yet</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = records.slice(0, 50).map(r => {
+    const color  = MODEL_COLORS[r.model_used] || '#94a3b8';
+    const cached = r.cache_hit;
+    const cost   = parseFloat(r.actual_cost_usd || 0);
+    const saved  = parseFloat(r.savings_usd || 0);
+    return `
+      <tr class="hover:bg-gray-800/30 transition">
+        <td class="py-2 pr-4 text-gray-500">${timeAgo(r.sk)}</td>
+        <td class="py-2 pr-4">
+          <span class="px-1.5 py-0.5 rounded text-xs" style="background:${color}22;color:${color}">${r.model_used}</span>
+        </td>
+        <td class="py-2 pr-4 text-gray-400">${r.complexity_category || '—'}</td>
+        <td class="py-2 pr-4 text-gray-400">${r.complexity_score ?? '—'}</td>
+        <td class="py-2 pr-4 text-gray-400">${r.total_tokens ?? '—'}</td>
+        <td class="py-2 pr-4 text-gray-300">${usd(cost)}</td>
+        <td class="py-2 pr-4 text-green-400">${saved > 0 ? '+' + usd(saved) : '—'}</td>
+        <td class="py-2">${cached ? '<span class="text-indigo-400">HIT</span>' : '<span class="text-gray-600">—</span>'}</td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Main refresh ─────────────────────────────────────────────────────────────
+async function refresh() {
+  const banner = document.getElementById('error-banner');
+  if (!API_KEY) {
+    banner.textContent = 'Enter your API key above and click Connect.';
+    banner.classList.remove('hidden');
+    return;
+  }
+
+  try {
+    const [savings, usage] = await Promise.all([
+      apiFetch('/v1/savings'),
+      apiFetch('/v1/usage?limit=50'),
+    ]);
+
+    banner.classList.add('hidden');
+
+    // KPIs
+    document.getElementById('kpi-savings').textContent  = usd(savings.total_savings_usd || 0);
+    document.getElementById('kpi-cost').textContent     = usd(savings.total_cost_usd || 0);
+    document.getElementById('kpi-requests').textContent = savings.total_requests || 0;
+    document.getElementById('kpi-cache').textContent    =
+      `${savings.cache_hits || 0} (${pct(savings.cache_hits, savings.total_requests)})`;
+
+    // Charts + table
+    const byModel = savings.by_model || {};
+    if (Object.keys(byModel).length) {
+      renderChart(byModel);
+      renderModelTable(byModel);
+    }
+
+    // Recent requests
+    renderRequests(usage.records || []);
+
+    // Timestamp
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+
+  } catch (err) {
+    banner.textContent = `Error: ${err.message}. Check your API key and that RouteIQ is running.`;
+    banner.classList.remove('hidden');
+    document.getElementById('last-updated').textContent = 'Failed to connect';
+  }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
