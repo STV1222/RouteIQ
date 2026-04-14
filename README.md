@@ -1,10 +1,20 @@
 # RouteIQ — LLM Cost Optimizer
 
+<p align="center">
+  <img src="assets/Cover_image.png" alt="RouteIQ Cover" width="100%" />
+</p>
+
 > Stop paying for a sports car when you need a bicycle. RouteIQ automatically routes each AI request to the cheapest model that can handle it — saving 50–90% on LLM costs with zero code changes.
 
 ## Demo
 
-[![Watch the demo](https://github.com/STV1222/RouteIQ/releases/download/v1.0.0/RouteIQ_demo.mov)](https://github.com/STV1222/RouteIQ/releases/download/v1.0.0/RouteIQ_demo.mov)
+<p align="center">
+  <a href="https://github.com/STV1222/RouteIQ/releases/download/v1.0.0/RouteIQ_demo.mov">
+    <img src="assets/Cover_image.png" alt="Watch Demo" width="80%" />
+    <br/>
+    <strong>▶ Click to watch demo</strong>
+  </a>
+</p>
 
 ---
 
